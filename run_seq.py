@@ -7,7 +7,7 @@ import sys
 import time
 import RPi.GPIO as GPIO
 import matplotlib.pyplot as plt
-#import seaborn as sns
+import seaborn as sns
 import pandas as pd
 import numpy as np
 import argparse
@@ -27,23 +27,20 @@ def get_color():
    time.sleep(1)
    return clear, red, green, blue
 
-
-def plot_seq_norm(colors, index, values, prefix):
+def save_data(colors, index, values, prefix):
     data = pd.DataFrame({"Color": colors,
                          "Values": values,
                          "Index": index})
-    #sns.barplot(x="Index", y="Values", hue="Color", data=data)
-    #plt.savefig("Run.jpeg")
-    index = list(set(data["Index"]))
-    index_sum = np.array([np.sum(data["Values"][data["Index"] == i]) for i in index])
-    print(index_sum)
-    red = data["Color"] == "red"
-    plt.bar(index, np.divide(data["Values"][red],index_sum), fill="red")
-    green = data["Color"] == "green"
-    plt.bar(index, np.divide(data["Values"][green],index_sum), fill="green")
-    blue = data["Color"] == "blue"
-    plt.bar(index, np.divide(data["Values"][blue],index_sum), fill="blue")
-    plt.savefig(prefix+"_norm.png")
+    data.to_csv(prefix+".csv")
+
+def plot_seq_sns(colors, index, values, prefix):
+    data = pd.DataFrame({"Color": colors,
+                         "Values": values,
+                         "Index": index})
+    sns.barplot(x="Index", y="Values", hue="Color", data=data)
+    plt.savefig(prefix+"_sns.png")
+    plt.clf()
+
 
 def plot_seq(colors, index, values, prefix):
     data = pd.DataFrame({"Color": colors,
@@ -59,6 +56,24 @@ def plot_seq(colors, index, values, prefix):
     blue = data["Color"] == "blue"
     plt.bar(index, data["Values"][blue], fill="blue")
     plt.savefig(prefix+".png")
+    plt.clf()
+
+
+
+def plot_seq_norm(colors, index, values, prefix):
+    data = pd.DataFrame({"Color": colors,
+                         "Values": values,
+                         "Index": index})
+    index = list(set(data["Index"]))
+    index_sum = [np.sum(data["Values"][data["Index"] == i]) for i in index]
+    red = data["Color"] == "red"
+    plt.bar(index, data["Values"][red]/index_sum, fill="red")
+    green = data["Color"] == "green"
+    plt.bar(index, data["Values"][green]/index_sum, fill="green")
+    blue = data["Color"] == "blue"
+    plt.bar(index, data["Values"][blue]/index_sum, fill="blue")
+    plt.savefig(prefix+"_norm.png")
+    plt.clf()
 
 def run(max_color_counts):
     StepCount = len(Seq)
@@ -149,7 +164,9 @@ if __name__ == "__main__":
     colors, index, values = run(args.max_reads)
     plot_seq(colors, index, values, args.prefix)
     plot_seq_norm(colors, index, values, args.prefix)
-    GPIO.output(led_pin, False)  
+    plot_seq_sns(colors, index, values, args.prefix)
+    GPIO.output(led_pin, False)
+    save_data(colors, index, values, args.prefix) 
     for pin in StepPins:
         print("Setup pins")
         GPIO.setup(pin, GPIO.OUT)
