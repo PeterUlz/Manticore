@@ -12,6 +12,8 @@ import pandas as pd
 import numpy as np
 import argparse
 
+from itertools import groupby
+
 
 def get_color():
    time.sleep(0.2)
@@ -26,6 +28,32 @@ def get_color():
    #GPIO.output(led_pin, False)   
    time.sleep(1)
    return clear, red, green, blue
+
+def predict_sequence(predictions):
+    predict_base = []
+    grouped_bases = [(k, sum(1 for i in g)) for k,g in groupby(predictions)]
+    for base,counts in grouped_bases:
+        if base == "Empty":
+            continue
+        if counts < 3:
+            continue
+        predict_base.append(base)
+        rem_count = counts
+        while counts > 5:
+            rem_count -= 5
+            if rem_count > 2:
+                predict_base.append(base)
+    return predict_base
+
+def load_centroids():
+    centroids = open("Centroids.csv", "r")
+    header = centroids.readline()
+    red = [float(value) for value in centroids.readline().split(",")[1:]]
+    blue = [float(value) for value in centroids.readline().split(",")[1:]]
+    green = [float(value) for value in centroids.readline().split(",")[1:]]
+    yellow = [float(value) for value in centroids.readline().split(",")[1:]]
+    empty = [float(value) for value in centroids.readline().split(",")[1:]]
+    return red, green, blue, yellow, empty
 
 def save_data(colors, index, values, prefix):
     data = pd.DataFrame({"Color": colors,
@@ -75,13 +103,30 @@ def plot_seq_norm(colors, index, values, prefix):
     plt.savefig(prefix+"_norm.png")
     plt.clf()
 
-def run(max_color_counts):
+
+def get_nearest_neighbor(red, green, blue, center_red, center_green, center_blue, center_yellow, center_empty):
+    bases = ["red", "green", "blue", "yellow", "Empty"]
+    values = np.array([red ,green, blue])
+    distance_red = np.linalg.norm(values-center_red)
+    distance_green = np.linalg.norm(values-center_green)
+    distance_blue = np.linalg.norm(values-center_blue)
+    distance_yellow = np.linalg.norm(values-center_yellow)
+    distance_empty = np.linalg.norm(values-center_empty)
+    distances = np.array([distance_red, distance_green, distance_blue, distance_yellow, distance_empty])
+    return bases[distances.argmin()], distances[distances.argmin()]
+
+def run(max_color_counts, center_red, center_green, center_blue, center_yellow, center_empty):
     StepCount = len(Seq)
     StepDir = 1
 
     StepCounter = 0
     total_steps = 0
     color_count = 0
+
+    colors = []
+    values = []
+    index  = []
+    predictions  = []
 
     while True:
         # print StepCounter
@@ -109,9 +154,12 @@ def run(max_color_counts):
             colors.extend(["clear","red","green","blue"])
             values.extend([clear, red, green, blue])
             index.extend([color_count]*4)
+            prediction, min_distance = get_nearest_neighbor(red, green, blue, center_red, center_green, center_blue, center_yellow, center_empty)
+            predictions.append(prediction)
+            print(prediction, min_distance)
 
         if color_count > max_color_counts:
-            return colors, index, values
+            return colors, index, values, predictions
 
 
 if __name__ == "__main__":
@@ -156,15 +204,17 @@ if __name__ == "__main__":
            [0,0,0,1]]
 
 
-    
-    colors = []
-    values = []
-    index  = []
-
-    colors, index, values = run(args.max_reads)
+    center_red, center_green, center_blue, center_yellow, center_empty = load_centroids()
+    colors, index, values, predictions = run(args.max_reads, center_red, center_green, center_blue, center_yellow, center_empty)
     plot_seq(colors, index, values, args.prefix)
     plot_seq_norm(colors, index, values, args.prefix)
     plot_seq_sns(colors, index, values, args.prefix)
+
+    sequence = predict_sequence(predictions)
+    print("predicted sequence:")
+    for i in sequence:
+        print(" -) ",i)
+
     GPIO.output(led_pin, False)
     save_data(colors, index, values, args.prefix) 
     for pin in StepPins:
